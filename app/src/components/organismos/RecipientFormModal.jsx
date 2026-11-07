@@ -63,10 +63,10 @@ export const RecipientFormModal = ({ isOpen, onClose, onSave, editingRecipient =
 
     return (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[2000] p-5 animate-in fade-in duration-200" onClick={onClose}>
-            <div className="w-full max-w-[550px] bg-white rounded-xl overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="w-full max-w-[550px] bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
                 {/* Header */}
-                <div className="px-6 py-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                    <h3 className="text-xl font-extrabold text-slate-900">
+                <div className="px-6 py-6 bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                    <h3 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">
                         {editingRecipient ? "Editar Destinatario" : "Nuevo Destinatario"}
                     </h3>
                     <Button variant="ghost" onClick={onClose}>
@@ -77,14 +77,14 @@ export const RecipientFormModal = ({ isOpen, onClose, onSave, editingRecipient =
                 {/* Content */}
                 <div className="p-6 flex flex-col gap-5 max-h-[70vh] overflow-y-auto">
                     <div className="flex flex-col gap-2">
-                        <label className="text-[13px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-2">
+                        <label className="text-[13px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wide flex items-center gap-2">
                             <FaUser /> Nombre Completo
                         </label>
                         <div className="relative flex items-center">
-                            <FaUser className="absolute left-4 text-slate-400" />
+                            <FaUser className="absolute left-4 text-slate-400 dark:text-slate-500" />
                             <input
                                 placeholder="Ej: Juan Pérez"
-                                className={`w-full pl-11 pr-4 py-3 border rounded-xl text-sm transition-all focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 ${errors.name ? "border-red-500" : "border-slate-200"}`}
+                                className={`w-full pl-11 pr-4 py-3 border rounded-xl text-sm transition-all focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 ${errors.name ? "border-red-500" : "border-slate-200 dark:border-slate-600"}`}
                                 value={formData.name}
                                 onChange={e => setFormData({ ...formData, name: e.target.value })}
                             />
@@ -93,15 +93,15 @@ export const RecipientFormModal = ({ isOpen, onClose, onSave, editingRecipient =
                     </div>
 
                     <div className="flex flex-col gap-2">
-                        <label className="text-[13px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-2">
+                        <label className="text-[13px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wide flex items-center gap-2">
                             <FaEnvelope /> Correo Electrónico
                         </label>
                         <div className="relative flex items-center">
-                            <FaEnvelope className="absolute left-4 text-slate-400" />
+                            <FaEnvelope className="absolute left-4 text-slate-400 dark:text-slate-500" />
                             <input
                                 type="email"
                                 placeholder="juan@ejemplo.com"
-                                className={`w-full pl-11 pr-4 py-3 border rounded-xl text-sm transition-all focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 ${errors.email ? "border-red-500" : "border-slate-200"}`}
+                                className={`w-full pl-11 pr-4 py-3 border rounded-xl text-sm transition-all focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 ${errors.email ? "border-red-500" : "border-slate-200 dark:border-slate-600"}`}
                                 value={formData.email}
                                 onChange={e => setFormData({ ...formData, email: e.target.value })}
                             />
@@ -109,7 +109,7 @@ export const RecipientFormModal = ({ isOpen, onClose, onSave, editingRecipient =
                         {errors.email && <span className="text-red-500 text-[11px] font-bold px-1">{errors.email}</span>}
                     </div>
 
-                    <div className="text-[12px] font-extrabold text-slate-400 uppercase tracking-wider mt-2.5 flex items-center gap-3 after:content-[''] after:flex-1 after:h-[1px] after:bg-slate-200/60">
+                    <div className="text-[12px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider mt-2.5 flex items-center gap-3 after:content-[''] after:flex-1 after:h-[1px] after:bg-slate-200/60 dark:after:bg-slate-700/60">
                         <FaBell /> Preferencias de Notificación
                     </div>
 
@@ -121,13 +121,13 @@ export const RecipientFormModal = ({ isOpen, onClose, onSave, editingRecipient =
                         ].map(type => (
                             <label
                                 key={type.id}
-                                className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all hover:bg-slate-50 active:scale-[0.98] ${formData.notificationTypes[type.id] ? "border-blue-500 bg-blue-50/30" : "border-slate-200 bg-white"}`}
+                                className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all hover:bg-slate-50 dark:hover:bg-slate-700/50 active:scale-[0.98] ${formData.notificationTypes[type.id] ? "border-blue-500 bg-blue-50/30 dark:bg-blue-900/20" : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"}`}
                             >
                                 <div className="flex flex-col">
-                                    <span className={`text-sm font-bold ${formData.notificationTypes[type.id] ? "text-blue-700" : "text-slate-700"}`}>
+                                    <span className={`text-sm font-bold ${formData.notificationTypes[type.id] ? "text-blue-700 dark:text-blue-300" : "text-slate-700 dark:text-slate-200"}`}>
                                         {type.label}
                                     </span>
-                                    <span className="text-[11px] text-slate-500 font-medium">{type.desc}</span>
+                                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{type.desc}</span>
                                 </div>
                                 <div className="relative">
                                     <input
@@ -142,7 +142,7 @@ export const RecipientFormModal = ({ isOpen, onClose, onSave, editingRecipient =
                                     {formData.notificationTypes[type.id] ? (
                                         <FaCheckSquare className="text-xl text-blue-500 transition-all scale-110" />
                                     ) : (
-                                        <FaSquare className="text-xl text-slate-300" />
+                                        <FaSquare className="text-xl text-slate-300 dark:text-slate-600" />
                                     )}
                                 </div>
                             </label>
@@ -152,18 +152,18 @@ export const RecipientFormModal = ({ isOpen, onClose, onSave, editingRecipient =
                     <label className="flex items-center gap-3 cursor-pointer mt-2 p-2 group">
                         <input
                             type="checkbox"
-                            className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
                             checked={formData.isSend}
                             onChange={e => setFormData({ ...formData, isSend: e.target.checked })}
                         />
-                        <span className="text-sm font-bold text-slate-700 group-hover:text-blue-600 transition-colors">
+                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                             Habilitar envío de notificaciones para este destinatario
                         </span>
                     </label>
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-5 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
+                <div className="px-6 py-5 bg-slate-50 dark:bg-slate-900/40 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
                     <Button variant="ghost" onClick={onClose} disabled={loading}>
                         Cancelar
                     </Button>

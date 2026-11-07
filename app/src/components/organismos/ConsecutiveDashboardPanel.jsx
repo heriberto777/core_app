@@ -12,17 +12,17 @@ export function ConsecutiveDashboardPanel({ data, onClose }) {
     return (
         <div className="flex flex-col gap-8 animate-in fade-in duration-500 slide-in-from-top-4">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 px-4 sm:px-8 py-6 bg-white/50 backdrop-blur-xl border border-slate-200 rounded-xl shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 px-4 sm:px-8 py-6 bg-white/50 dark:bg-slate-800/50 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm">
                 <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 shrink-0 bg-red-50 rounded-xl flex items-center justify-center text-red-500">
+                    <div className="w-10 h-10 shrink-0 bg-red-50 dark:bg-red-900/30 rounded-xl flex items-center justify-center text-red-500 dark:text-red-400">
                         <FaHeartbeat className="text-xl animate-pulse" />
                     </div>
                     <div className="flex flex-col">
-                        <h3 className="text-lg font-black text-slate-900 leading-none mb-1">Salud de Folios</h3>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Monitoreo de disponibilidad y reservas</span>
+                        <h3 className="text-lg font-black text-slate-900 dark:text-slate-100 leading-none mb-1">Salud de Folios</h3>
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Monitoreo de disponibilidad y reservas</span>
                     </div>
                 </div>
-                <Button variant="ghost" onClick={onClose} className="text-slate-500 font-bold hover:text-red-500 self-start sm:self-auto">
+                <Button variant="ghost" onClick={onClose} className="text-slate-500 dark:text-slate-400 font-bold hover:text-red-500 dark:hover:text-red-400 self-start sm:self-auto">
                     <FaTimes className="mr-2" /> Cerrar Dashboard
                 </Button>
             </div>
@@ -32,11 +32,11 @@ export function ConsecutiveDashboardPanel({ data, onClose }) {
                 {data.map((item) => {
                     const health = getHealth(item);
                     return (
-                        <div key={item.id} className="bg-white border border-slate-100 rounded-xl p-8 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
+                        <div key={item.id} className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-8 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
                             <div className="flex justify-between items-start mb-8">
                                 <div className="flex flex-col gap-1">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Identificador</span>
-                                    <h4 className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors">{item.name}</h4>
+                                    <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Identificador</span>
+                                    <h4 className="text-sm font-black text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{item.name}</h4>
                                 </div>
                                 <div className="flex flex-col items-end gap-1">
                                     <div className={`w-3 h-3 rounded-full ${health.color} ${health.shadow} shadow-lg ring-4 ring-white relative`}>
@@ -47,32 +47,32 @@ export function ConsecutiveDashboardPanel({ data, onClose }) {
                             </div>
 
                             <div className="space-y-4">
-                                <div className="flex justify-between items-center py-3 border-b border-slate-50">
-                                    <div className="flex items-center gap-3 text-slate-400">
+                                <div className="flex justify-between items-center py-3 border-b border-slate-50 dark:border-slate-700">
+                                    <div className="flex items-center gap-3 text-slate-400 dark:text-slate-500">
                                         <FaLayerGroup className="text-xs" />
                                         <span className="text-[10px] font-black uppercase tracking-wider">Valor Actual</span>
                                     </div>
-                                    <span className="text-sm font-black text-slate-900">{item.currentValue}</span>
+                                    <span className="text-sm font-black text-slate-900 dark:text-slate-100">{item.currentValue}</span>
                                 </div>
-                                
-                                <div className="flex justify-between items-center py-3 border-b border-slate-50">
-                                    <div className="flex items-center gap-3 text-slate-400">
+
+                                <div className="flex justify-between items-center py-3 border-b border-slate-50 dark:border-slate-700">
+                                    <div className="flex items-center gap-3 text-slate-400 dark:text-slate-500">
                                         <FaClock className="text-xs" />
                                         <span className="text-[10px] font-black uppercase tracking-wider">Reservas Activas</span>
                                     </div>
-                                    <span className="text-sm font-black text-blue-600">{item.activeReservations}</span>
+                                    <span className="text-sm font-black text-blue-600 dark:text-blue-400">{item.activeReservations}</span>
                                 </div>
 
-                                <div className="flex justify-between items-center py-3 border-b border-slate-50">
-                                    <div className="flex items-center gap-3 text-slate-400">
+                                <div className="flex justify-between items-center py-3 border-b border-slate-50 dark:border-slate-700">
+                                    <div className="flex items-center gap-3 text-slate-400 dark:text-slate-500">
                                         <FaChartLine className="text-xs" />
                                         <span className="text-[10px] font-black uppercase tracking-wider">Carga (24h)</span>
                                     </div>
-                                    <span className="text-sm font-black text-emerald-600">+{item.totalIncrements}</span>
+                                    <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">+{item.totalIncrements}</span>
                                 </div>
 
                                 {item.expiredReservations > 0 && (
-                                    <div className="flex justify-between items-center py-3 border-b border-slate-50 animate-bounce-short">
+                                    <div className="flex justify-between items-center py-3 border-b border-slate-50 dark:border-slate-700 animate-bounce-short">
                                         <div className="flex items-center gap-3 text-red-500">
                                             <FaExclamationTriangle className="text-xs" />
                                             <span className="text-[10px] font-black uppercase tracking-wider">Expirados</span>

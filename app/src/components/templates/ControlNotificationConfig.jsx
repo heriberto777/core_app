@@ -97,7 +97,7 @@ export function ControlNotificationConfig() {
             checked={formData.webhookEnabled}
             onChange={(e) => handleChange("webhookEnabled", e.target.checked)}
             disabled={!canManage}
-            className="w-5 h-5 rounded-lg text-primary-600 border-slate-300 focus:ring-primary-500"
+            className="w-5 h-5 rounded-lg text-primary-600 border-slate-300 dark:border-slate-600 focus:ring-primary-500"
           />
           <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
             Habilitar notificaciones por Webhook
@@ -119,7 +119,7 @@ export function ControlNotificationConfig() {
               checked={formData.notifyOnAutomatic}
               onChange={(e) => handleChange("notifyOnAutomatic", e.target.checked)}
               disabled={!canManage}
-              className="w-5 h-5 rounded-lg text-primary-600 border-slate-300 focus:ring-primary-500"
+              className="w-5 h-5 rounded-lg text-primary-600 border-slate-300 dark:border-slate-600 focus:ring-primary-500"
             />
             <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
               Notificar resumen de ejecuciones automáticas (cron)
@@ -131,7 +131,7 @@ export function ControlNotificationConfig() {
               checked={formData.notifyOnManual}
               onChange={(e) => handleChange("notifyOnManual", e.target.checked)}
               disabled={!canManage}
-              className="w-5 h-5 rounded-lg text-primary-600 border-slate-300 focus:ring-primary-500"
+              className="w-5 h-5 rounded-lg text-primary-600 border-slate-300 dark:border-slate-600 focus:ring-primary-500"
             />
             <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
               Notificar resumen de ejecuciones manuales (individuales)

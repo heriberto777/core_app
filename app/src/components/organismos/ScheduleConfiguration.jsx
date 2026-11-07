@@ -116,17 +116,17 @@ export function ScheduleConfiguration() {
   const isSchedulerActive = scheduleConfig?.active ?? scheduleConfig?.enabled;
 
   return (
-    <div className="bg-white/50 backdrop-blur-xl border border-slate-200 rounded-xl p-8 flex flex-col gap-10 shadow-sm animate-in fade-in duration-500">
+    <div className="bg-white/50 dark:bg-slate-800/50 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-xl p-8 flex flex-col gap-10 shadow-sm animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start gap-6 border-b border-slate-100 pb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start gap-6 border-b border-slate-100 dark:border-slate-700 pb-8">
         <div className="flex flex-col gap-2">
-          <h2 className="text-xl font-black text-slate-900 flex items-center gap-3">
+          <h2 className="text-xl font-black text-slate-900 dark:text-slate-100 flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
               <FaClock />
             </div>
             Programación Automática
           </h2>
-          <p className="text-sm text-slate-500 font-medium ml-[52px]">
+          <p className="text-sm text-slate-500 dark:text-slate-400 font-medium ml-[52px]">
             Configura la hora de ejecución automática y monitorea el estado del orquestador.
           </p>
         </div>
@@ -138,12 +138,12 @@ export function ScheduleConfiguration() {
       {loading ? (
         <div className="flex flex-col items-center justify-center p-20 gap-4 opacity-50 animate-pulse">
           <FaSync className="text-3xl text-blue-600 animate-spin" />
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Obteniendo configuración...</span>
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Obteniendo configuración...</span>
         </div>
       ) : (
         <div className="flex flex-col gap-10">
           {/* Status Card */}
-          <div className={`p-8 rounded-xl border-l-8 bg-white shadow-sm flex flex-col gap-6 animate-in slide-in-from-left-4 duration-500 ${
+          <div className={`p-8 rounded-xl border-l-8 bg-white dark:bg-slate-800 shadow-sm flex flex-col gap-6 animate-in slide-in-from-left-4 duration-500 ${
             isSchedulerActive ? "border-emerald-500 shadow-emerald-500/5" : "border-red-500 shadow-red-500/5 opacity-80"
           }`}>
             <div className="flex items-center gap-6">
@@ -153,19 +153,19 @@ export function ScheduleConfiguration() {
                 {isSchedulerActive ? <FaCheck /> : <FaTimes />}
               </div>
               <div className="flex flex-col">
-                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Estado del Programador</span>
-                <span className={`text-xl font-black ${isSchedulerActive ? "text-emerald-600" : "text-red-600"}`}>
+                <span className="text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Estado del Programador</span>
+                <span className={`text-xl font-black ${isSchedulerActive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
                   {isSchedulerActive ? "SISTEMA ACTIVO" : "SISTEMA INACTIVO"}
                 </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-50 sm:ml-20">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-50 dark:border-slate-700 sm:ml-20">
               {isSchedulerActive ? (
                 <>
                   <div className="flex flex-col gap-1">
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Hora Configurada</span>
-                    <span className="text-sm font-black text-slate-900 bg-slate-50 px-3 py-1 rounded-lg w-fit">
+                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Hora Configurada</span>
+                    <span className="text-sm font-black text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-900/40 px-3 py-1 rounded-lg w-fit">
                       {scheduleConfig.hour}
                       {" · "}
                       {SCHEDULE_TIMEZONE_OPTIONS.find((tz) => tz.value === scheduleConfig.timezone)?.label || scheduleConfig.timezone || "America/Santo_Domingo"}
@@ -174,19 +174,19 @@ export function ScheduleConfiguration() {
                   {typeof nextExecution === "object" && (
                     <>
                       <div className="flex flex-col gap-1">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Próxima Ejecución</span>
-                        <span className="text-sm font-black text-slate-900">{nextExecution.time} - {nextExecution.date}</span>
+                        <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Próxima Ejecución</span>
+                        <span className="text-sm font-black text-slate-900 dark:text-slate-100">{nextExecution.time} - {nextExecution.date}</span>
                       </div>
                       <div className="flex flex-col gap-1">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tiempo Restante</span>
-                        <span className="text-sm font-black text-emerald-600">{nextExecution.hoursUntil} aprox.</span>
+                        <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Tiempo Restante</span>
+                        <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{nextExecution.hoursUntil} aprox.</span>
                       </div>
                     </>
                   )}
                 </>
               ) : (
                 <div className="col-span-full">
-                  <p className="text-xs font-bold text-slate-400 italic">
+                  <p className="text-xs font-bold text-slate-400 dark:text-slate-500 italic">
                     Las tareas automáticas están desactivadas. El sistema requiere intervención manual para disparar los procesos.
                   </p>
                 </div>
@@ -202,13 +202,13 @@ export function ScheduleConfiguration() {
               { label: "Manuales", val: taskStats.manual, color: "amber", icon: <FaUser /> },
               { label: "Inactivas", val: taskStats.inactive, color: "red", icon: <FaTimes /> }
             ].map(stat => (
-              <div key={stat.label} className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center gap-5 group hover:border-blue-200 transition-all">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-colors bg-${stat.color}-50 text-${stat.color}-500 group-hover:bg-${stat.color}-500 group-hover:text-white`}>
+              <div key={stat.label} className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-5 group hover:border-blue-200 dark:hover:border-blue-800 transition-all">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-colors bg-${stat.color}-50 dark:bg-${stat.color}-900/30 text-${stat.color}-500 dark:text-${stat.color}-400 group-hover:bg-${stat.color}-500 group-hover:text-white`}>
                   {stat.icon}
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-2xl font-black text-slate-900 leading-none mb-1">{stat.val}</span>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</span>
+                  <span className="text-2xl font-black text-slate-900 dark:text-slate-100 leading-none mb-1">{stat.val}</span>
+                  <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{stat.label}</span>
                 </div>
               </div>
             ))}
@@ -216,8 +216,8 @@ export function ScheduleConfiguration() {
 
           {/* Info Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="p-8 bg-white border border-slate-100 rounded-xl shadow-sm flex flex-col gap-6">
-              <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.2em] flex items-center gap-3">
+            <div className="p-8 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl shadow-sm flex flex-col gap-6">
+              <h3 className="text-[11px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.2em] flex items-center gap-3">
                 <FaInfoCircle /> Funcionamiento
               </h3>
               <ul className="flex flex-col gap-4">
@@ -229,16 +229,16 @@ export function ScheduleConfiguration() {
                   <li key={item.t} className="flex gap-4">
                     <div className="min-w-[4px] h-4 mt-1 bg-blue-500 rounded-full" />
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-black text-slate-900">{item.t}</span>
-                      <span className="text-xs text-slate-500 leading-relaxed">{item.d}</span>
+                      <span className="text-sm font-black text-slate-900 dark:text-slate-100">{item.t}</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{item.d}</span>
                     </div>
                   </li>
                 ))}
               </ul>
             </div>
 
-            <div className="p-8 bg-white border border-slate-100 rounded-xl shadow-sm flex flex-col gap-6">
-              <h3 className="text-[11px] font-black text-amber-600 uppercase tracking-[0.2em] flex items-center gap-3">
+            <div className="p-8 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl shadow-sm flex flex-col gap-6">
+              <h3 className="text-[11px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-[0.2em] flex items-center gap-3">
                 <FaShieldAlt /> Consideraciones
               </h3>
               <ul className="flex flex-col gap-4">
@@ -250,8 +250,8 @@ export function ScheduleConfiguration() {
                   <li key={item.t} className="flex gap-4">
                     <div className="min-w-[4px] h-4 mt-1 bg-amber-500 rounded-full" />
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-black text-slate-900">{item.t}</span>
-                      <span className="text-xs text-slate-500 leading-relaxed">{item.d}</span>
+                      <span className="text-sm font-black text-slate-900 dark:text-slate-100">{item.t}</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{item.d}</span>
                     </div>
                   </li>
                 ))}
@@ -260,12 +260,12 @@ export function ScheduleConfiguration() {
           </div>
 
           {/* History Section */}
-          <div className="p-8 bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col gap-8">
+          <div className="p-8 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm flex flex-col gap-8">
             <div className="flex flex-col sm:flex-row gap-3 justify-between items-center px-2">
-              <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3">
+              <h3 className="text-[11px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-[0.2em] flex items-center gap-3">
                 <FaHistory /> Últimas Ejecuciones
               </h3>
-              <Button variant="ghost" className="text-blue-600 font-bold text-xs uppercase tracking-widest" onClick={() => navigate("/history")}>
+              <Button variant="ghost" className="text-blue-600 dark:text-blue-400 font-bold text-xs uppercase tracking-widest" onClick={() => navigate("/history")}>
                 Ver Todo el Historial
               </Button>
             </div>
@@ -275,7 +275,7 @@ export function ScheduleConfiguration() {
                 resumen — mostrar filas inventadas como si fueran datos
                 reales era engañoso. El detalle real por tarea sí existe en
                 el Centro de Auditoría. */}
-            <div className="flex flex-col items-center justify-center gap-3 py-10 text-slate-400">
+            <div className="flex flex-col items-center justify-center gap-3 py-10 text-slate-400 dark:text-slate-500">
               <FaHistory className="text-3xl opacity-30" />
               <p className="text-xs font-bold text-center max-w-sm">
                 El resumen agregado de ejecuciones automáticas aún no está disponible aquí.
@@ -285,16 +285,16 @@ export function ScheduleConfiguration() {
           </div>
 
           {/* Quick Actions */}
-          <div className="p-8 bg-slate-50/50 border border-slate-100 rounded-xl flex flex-col gap-6">
-            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] px-2">Acciones Rápidas</h3>
+          <div className="p-8 bg-slate-50/50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-700 rounded-xl flex flex-col gap-6">
+            <h3 className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] px-2">Acciones Rápidas</h3>
             <div className="flex gap-4 flex-wrap">
-              <Button variant="ghost" className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 shadow-sm" onClick={() => navigate("/history")}>
+              <Button variant="ghost" className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm" onClick={() => navigate("/history")}>
                 <FaEye className="mr-2" /> Ver Logs
               </Button>
-              <Button variant="ghost" className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 shadow-sm" onClick={() => navigate("/tasks")}>
+              <Button variant="ghost" className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm" onClick={() => navigate("/tasks")}>
                 <FaTasks className="mr-2" /> Gestionar Tareas
               </Button>
-              <Button variant="ghost" className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 shadow-sm" onClick={() => navigate("/configuraciones")}>
+              <Button variant="ghost" className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm" onClick={() => navigate("/configuraciones")}>
                 <FaEnvelope className="mr-2" /> Config. Email
               </Button>
             </div>

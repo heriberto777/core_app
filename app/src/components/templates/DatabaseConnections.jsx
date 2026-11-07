@@ -75,8 +75,8 @@ export function DatabaseConnections() {
       {/* HEADER */}
       <header className="flex flex-col md:flex-row justify-between items-start gap-6">
         <div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Infraestructura de Datos</h1>
-          <p className="text-slate-500 mt-2 font-medium">Gestión de conexiones y servidores de bases de datos del ecosistema.</p>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">Infraestructura de Datos</h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Gestión de conexiones y servidores de bases de datos del ecosistema.</p>
         </div>
         {canManage && (
           <Button variant="primary" onClick={handleAdd}>
@@ -91,26 +91,26 @@ export function DatabaseConnections() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {connections.map((conn) => (
-            <div 
-              key={conn.serverName} 
-              className="bg-white rounded-xl p-6 border border-slate-100 shadow-soft hover:shadow-lg transition-all duration-300 group hover:-translate-y-1 flex flex-col gap-6"
+            <div
+              key={conn.serverName}
+              className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-100 dark:border-slate-700 shadow-soft hover:shadow-lg transition-all duration-300 group hover:-translate-y-1 flex flex-col gap-6"
             >
               {/* CARD HEADER */}
               <div className="flex justify-between items-start">
-                <div className="w-14 h-14 rounded-2xl bg-primary-100 text-primary-600 flex items-center justify-center text-2xl shadow-inner transition-transform group-hover:scale-110 duration-300">
+                <div className="w-14 h-14 rounded-2xl bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 flex items-center justify-center text-2xl shadow-inner transition-transform group-hover:scale-110 duration-300">
                   <FaDatabase />
                 </div>
                 {canManage && (
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => handleEdit(conn)}
-                      className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
+                      className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-all"
                     >
                       <FaEdit size={16} />
                     </button>
                     <button
                       onClick={() => handleDelete(conn.serverName)}
-                      className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                      className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-all"
                     >
                       <FaTrash size={16} />
                     </button>
@@ -120,35 +120,35 @@ export function DatabaseConnections() {
 
               {/* INFO */}
               <div className="space-y-3">
-                <h3 className="text-lg font-extrabold text-slate-800 tracking-tight truncate" title={conn.serverName}>
+                <h3 className="text-lg font-extrabold text-slate-800 dark:text-slate-100 tracking-tight truncate" title={conn.serverName}>
                   {conn.serverName}
                 </h3>
                 <div className="space-y-2">
-                  <div className="flex items-center gap-3 text-xs font-bold text-slate-400">
-                    <FaServer className="text-slate-300" />
+                  <div className="flex items-center gap-3 text-xs font-bold text-slate-400 dark:text-slate-500">
+                    <FaServer className="text-slate-300 dark:text-slate-600" />
                     <span className="truncate" title={conn.host}>{conn.host}</span>
                   </div>
-                  <div className="flex items-center gap-3 text-xs font-bold text-slate-400">
-                    <FaPlug className="text-slate-300" />
+                  <div className="flex items-center gap-3 text-xs font-bold text-slate-400 dark:text-slate-500">
+                    <FaPlug className="text-slate-300 dark:text-slate-600" />
                     <span>Puerto: {conn.port}</span>
                   </div>
                 </div>
               </div>
 
               {/* FOOTER */}
-              <div className="mt-auto pt-5 border-t border-slate-50 flex items-center justify-between">
+              <div className="mt-auto pt-5 border-t border-slate-50 dark:border-slate-700 flex items-center justify-between">
                 <StatusBadge status="ACTIVE">{conn.type?.toUpperCase() || 'MSSQL'}</StatusBadge>
-                <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Servidor Activo</div>
+                <div className="text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest">Servidor Activo</div>
               </div>
             </div>
           ))}
 
           {/* EMPTY STATE OR ADD CARD */}
           {connections.length === 0 && (
-            <div className="md:col-span-2 lg:col-span-3 xl:col-span-4 p-20 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-               <FaDatabase className="text-slate-200 mb-6" size={64} />
-               <p className="text-xl font-extrabold text-slate-400">No hay servidores configurados</p>
-               <p className="text-sm text-slate-400 mt-2">Comienza agregando tu primera conexión a base de datos.</p>
+            <div className="md:col-span-2 lg:col-span-3 xl:col-span-4 p-20 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50/50 dark:bg-slate-900/40">
+               <FaDatabase className="text-slate-200 dark:text-slate-700 mb-6" size={64} />
+               <p className="text-xl font-extrabold text-slate-400 dark:text-slate-500">No hay servidores configurados</p>
+               <p className="text-sm text-slate-400 dark:text-slate-500 mt-2">Comienza agregando tu primera conexión a base de datos.</p>
                {canManage && (
                  <Button variant="primary" onClick={handleAdd} className="mt-8">
                     <FaPlus /> Configurar Servidor

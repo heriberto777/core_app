@@ -386,33 +386,33 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
   };
 
   return (
-    <div className="relative bg-white border border-slate-200 rounded-xl p-8 mb-8 shadow-sm animate-in fade-in duration-500 overflow-hidden">
+    <div className="relative bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-8 mb-8 shadow-sm animate-in fade-in duration-500 overflow-hidden">
       {/* Loading Overlay */}
       {loading && (
-        <div className="absolute inset-0 bg-white/80 backdrop-blur-md flex flex-col items-center justify-center z-20 animate-in fade-in duration-300">
+        <div className="absolute inset-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md flex flex-col items-center justify-center z-20 animate-in fade-in duration-300">
           <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin shadow-lg mb-4" />
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Sincronizando...</span>
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">Sincronizando...</span>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex flex-col gap-2 mb-10 border-b border-slate-50 pb-6">
-        <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
+      <div className="flex flex-col gap-2 mb-10 border-b border-slate-50 dark:border-slate-700 pb-6">
+        <h3 className="text-xl font-black text-slate-900 dark:text-slate-100 flex items-center gap-3">
           <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
             <FaHashtag />
           </div>
           Configuración de Consecutivos
         </h3>
-        <p className="text-sm text-slate-500 font-medium ml-[52px]">
+        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium ml-[52px]">
           Gestione la numeración automática para sus documentos y registros en el sistema de destino.
         </p>
       </div>
 
       {/* Enable Toggle */}
       <label className={`flex items-center gap-4 px-8 py-5 rounded-xl cursor-pointer transition-all border mb-8 group ${
-        isEnabled ? "bg-blue-50/50 border-blue-200" : "bg-slate-50 border-slate-100 hover:bg-slate-100/50"
+        isEnabled ? "bg-blue-50/50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/30" : "bg-slate-50 dark:bg-slate-900/40 border-slate-100 dark:border-slate-700 hover:bg-slate-100/50 dark:hover:bg-slate-700/50"
       }`}>
-        <div className={`w-12 h-6 rounded-full p-1 transition-colors relative ${isEnabled ? "bg-blue-600" : "bg-slate-300"}`}>
+        <div className={`w-12 h-6 rounded-full p-1 transition-colors relative ${isEnabled ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-600"}`}>
           <div className={`w-4 h-4 bg-white rounded-full transition-transform transform ${isEnabled ? "translate-x-6" : "translate-x-0"}`} />
         </div>
         <input
@@ -424,16 +424,16 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
           onChange={handleChange}
         />
         <div className="flex flex-col">
-          <span className={`text-sm font-black uppercase tracking-wider ${isEnabled ? "text-blue-700" : "text-slate-500"}`}>Numeración Automática</span>
-          <span className="text-[10px] font-bold text-slate-400">Activa la generación de folios secuenciales para este proceso</span>
+          <span className={`text-sm font-black uppercase tracking-wider ${isEnabled ? "text-blue-700 dark:text-blue-300" : "text-slate-500 dark:text-slate-400"}`}>Numeración Automática</span>
+          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">Activa la generación de folios secuenciales para este proceso</span>
         </div>
       </label>
 
       {isEnabled && (
         <div className="flex flex-col gap-10 animate-in slide-in-from-top-4 duration-500">
           {/* System Selection */}
-          <div className="p-8 bg-slate-50/50 border border-slate-200 rounded-xl flex flex-col gap-6">
-            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+          <div className="p-8 bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-xl flex flex-col gap-6">
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 flex items-center gap-2">
               <FaCogs /> Sistema de Ejecución
             </span>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -445,28 +445,28 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
                   key={opt.id}
                   onClick={() => setUseCentralizedSystem(opt.val)}
                   className={`p-6 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-4 ${
-                    opt.active ? "bg-white border-blue-500 shadow-xl shadow-blue-500/5 ring-4 ring-blue-500/5" : "bg-white/50 border-slate-100 hover:border-slate-300 grayscale opacity-60"
+                    opt.active ? "bg-white dark:bg-slate-800 border-blue-500 shadow-xl shadow-blue-500/5 ring-4 ring-blue-500/5" : "bg-white/50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 grayscale opacity-60"
                   }`}
                 >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${opt.active ? "bg-blue-600 text-white shadow-lg" : "bg-slate-100 text-slate-400"}`}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${opt.active ? "bg-blue-600 text-white shadow-lg" : "bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500"}`}>
                     {opt.icon}
                   </div>
                   <div className="flex flex-col gap-0.5">
-                    <span className={`text-sm font-black ${opt.active ? "text-slate-900" : "text-slate-400"}`}>{opt.label}</span>
-                    <span className="text-[11px] font-medium text-slate-400 leading-tight">{opt.sub}</span>
+                    <span className={`text-sm font-black ${opt.active ? "text-slate-900 dark:text-slate-100" : "text-slate-400 dark:text-slate-500"}`}>{opt.label}</span>
+                    <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 leading-tight">{opt.sub}</span>
                   </div>
                 </div>
               ))}
             </div>
 
             {useCentralizedSystem && (
-              <div className="mt-4 p-8 bg-white border border-slate-200 rounded-xl shadow-sm animate-in zoom-in-95 duration-300">
+              <div className="mt-4 p-8 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm animate-in zoom-in-95 duration-300">
                 {assignedConsecutives.length > 0 ? (
                   <div className="flex flex-col gap-6">
                     <div className="flex flex-col gap-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Consecutivo Asignado</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 px-1">Consecutivo Asignado</label>
                       <select
-                        className="w-full px-5 py-4 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-black transition-all appearance-none"
+                        className="w-full px-5 py-4 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 dark:bg-slate-900/40 text-slate-900 dark:text-slate-100 font-black transition-all appearance-none"
                         value={selectedCentralizedConsecutive}
                         onChange={(e) => setSelectedCentralizedConsecutive(e.target.value)}
                       >
@@ -487,12 +487,12 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-6 py-4 text-center">
-                    <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center">
+                    <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
                       <FaInfoCircle className="text-2xl text-blue-500 opacity-30" />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <span className="text-sm font-black text-slate-900">No hay vinculaciones activas</span>
-                      <p className="text-xs text-slate-400 max-w-[280px]">Asigne un consecutivo existente o cree uno nuevo para habilitar este sistema.</p>
+                      <span className="text-sm font-black text-slate-900 dark:text-slate-100">No hay vinculaciones activas</span>
+                      <p className="text-xs text-slate-400 dark:text-slate-500 max-w-[280px]">Asigne un consecutivo existente o cree uno nuevo para habilitar este sistema.</p>
                     </div>
                     <div className="flex gap-3">
                       <Button onClick={handleAddNewAssignedConsecutive} variant="secondary" className="px-6">Vincular Existente</Button>
@@ -508,13 +508,13 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 px-1">Campo Encabezado</label>
-                <p className="text-[10px] text-slate-400 font-medium px-1 mb-2">Campo en la tabla principal que recibirá el folio</p>
+                <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 dark:text-slate-100 px-1">Campo Encabezado</label>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium px-1 mb-2">Campo en la tabla principal que recibirá el folio</p>
                 <input
                   type="text"
                   name="consecutiveConfig.fieldName"
                   placeholder="Ej: NUM_FACTURA"
-                  className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white font-black transition-all shadow-sm placeholder:text-slate-200"
+                  className="w-full px-5 py-4 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white dark:bg-slate-900/40 text-slate-900 dark:text-slate-100 font-black transition-all shadow-sm placeholder:text-slate-200 dark:placeholder:text-slate-600"
                   value={consecutiveConfig.fieldName || ""}
                   onChange={handleChange}
                 />
@@ -523,13 +523,13 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
 
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 px-1">Campo Detalle (Opcional)</label>
-                <p className="text-[10px] text-slate-400 font-medium px-1 mb-2">Campo en la tabla de detalle para vinculación</p>
+                <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 dark:text-slate-100 px-1">Campo Detalle (Opcional)</label>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium px-1 mb-2">Campo en la tabla de detalle para vinculación</p>
                 <input
                   type="text"
                   name="consecutiveConfig.detailFieldName"
                   placeholder="Ej: NUM_PEDIDO"
-                  className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white font-black transition-all shadow-sm placeholder:text-slate-200"
+                  className="w-full px-5 py-4 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white dark:bg-slate-900/40 text-slate-900 dark:text-slate-100 font-black transition-all shadow-sm placeholder:text-slate-200 dark:placeholder:text-slate-600"
                   value={consecutiveConfig.detailFieldName || ""}
                   onChange={handleChange}
                 />
@@ -539,27 +539,27 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
 
           {/* Local Config Specifics */}
           {!useCentralizedSystem && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8 bg-slate-50/50 border border-slate-200 rounded-xl animate-in slide-in-from-right-4 duration-500">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8 bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-xl animate-in slide-in-from-right-4 duration-500">
               <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Último Valor Usado</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 px-1">Último Valor Usado</label>
                   <input
                     type="number"
                     name="consecutiveConfig.lastValue"
-                    className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white font-black transition-all"
+                    className="w-full px-5 py-4 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white dark:bg-slate-900/40 text-slate-900 dark:text-slate-100 font-black transition-all"
                     value={consecutiveConfig.lastValue || 0}
                     onChange={handleChange}
                   />
-                  <small className="text-[10px] text-blue-600 font-bold px-1">El próximo valor generado será {Number(consecutiveConfig.lastValue || 0) + 1}</small>
+                  <small className="text-[10px] text-blue-600 dark:text-blue-400 font-bold px-1">El próximo valor generado será {Number(consecutiveConfig.lastValue || 0) + 1}</small>
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Prefijo Local</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 px-1">Prefijo Local</label>
                   <input
                     type="text"
                     name="consecutiveConfig.prefix"
                     placeholder="Ej: INV-"
-                    className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white font-black transition-all"
+                    className="w-full px-5 py-4 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white dark:bg-slate-900/40 text-slate-900 dark:text-slate-100 font-black transition-all"
                     value={consecutiveConfig.prefix || ""}
                     onChange={handleChange}
                   />
@@ -568,18 +568,18 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
 
               <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Formato de Patrón</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 px-1">Formato de Patrón</label>
                   <input
                     type="text"
                     name="consecutiveConfig.pattern"
                     placeholder="Ej: {PREFIX}{YEAR}-{VALUE:6}"
-                    className="w-full px-5 py-4 border border-slate-200 rounded-2xl font-mono text-sm focus:outline-none focus:border-blue-500 bg-white font-black transition-all"
+                    className="w-full px-5 py-4 border border-slate-200 dark:border-slate-700 rounded-2xl font-mono text-sm focus:outline-none focus:border-blue-500 bg-white dark:bg-slate-900/40 text-slate-900 dark:text-slate-100 font-black transition-all"
                     value={consecutiveConfig.pattern || ""}
                     onChange={handleChange}
                   />
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 px-1">
                     {["{PREFIX}", "{YEAR}", "{VALUE:n}", "{MONTH}", "{DAY}"].map(v => (
-                      <span key={v} className="text-[9px] font-bold text-slate-400 font-mono">{v}</span>
+                      <span key={v} className="text-[9px] font-bold text-slate-400 dark:text-slate-500 font-mono">{v}</span>
                     ))}
                   </div>
                 </div>
@@ -588,22 +588,22 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
                   <input
                     type="checkbox"
                     name="consecutiveConfig.updateAfterTransfer"
-                    className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
                     checked={consecutiveConfig.updateAfterTransfer !== false}
                     onChange={handleChange}
                   />
-                  <span className="text-xs font-bold text-slate-600 group-hover:text-slate-900 transition-colors">Actualización inmediata (por documento)</span>
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors">Actualización inmediata (por documento)</span>
                 </label>
               </div>
             </div>
           )}
 
           {/* Table-Specific Mappings */}
-          <div className="p-8 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-6">
+          <div className="p-8 bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-700 rounded-xl flex flex-col gap-6">
             <div className="flex justify-between items-center px-1">
               <div className="flex flex-col gap-1">
-                <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900">Asignación Específica por Tablas</span>
-                <p className="text-[10px] text-slate-400 font-medium">Prioridad máxima sobre campos generales</p>
+                <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 dark:text-slate-100">Asignación Específica por Tablas</span>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">Prioridad máxima sobre campos generales</p>
               </div>
               <Button onClick={addTableFieldMapping} className="px-6 py-2.5 text-[10px] font-black uppercase shadow-lg shadow-blue-600/20">
                 <FaPlus className="mr-2" /> Añadir Mapeo
@@ -613,18 +613,18 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-2">
               {tableMappings && tableMappings.length > 0 ? (
                 tableMappings.map((m, index) => (
-                  <div key={index} className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-blue-300 transition-all group flex flex-col gap-4">
+                  <div key={index} className="p-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm hover:border-blue-300 dark:hover:border-blue-700 transition-all group flex flex-col gap-4">
                     <div className="flex justify-between items-start">
-                      <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
+                      <div className="w-10 h-10 bg-slate-50 dark:bg-slate-900/40 rounded-xl flex items-center justify-center text-slate-400 dark:text-slate-500 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/30 group-hover:text-blue-500 dark:group-hover:text-blue-300 transition-colors">
                         <FaLayerGroup />
                       </div>
-                      <button onClick={() => removeTableFieldMapping(index)} className="text-slate-300 hover:text-red-500 transition-colors p-1">
+                      <button onClick={() => removeTableFieldMapping(index)} className="text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 transition-colors p-1">
                         <FaTrash className="text-sm" />
                       </button>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">{m.tableName}</span>
-                      <span className="text-sm font-black text-slate-900">{m.fieldName}</span>
+                      <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">{m.tableName}</span>
+                      <span className="text-sm font-black text-slate-900 dark:text-slate-100">{m.fieldName}</span>
                     </div>
                   </div>
                 ))

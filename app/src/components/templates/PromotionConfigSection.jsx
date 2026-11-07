@@ -116,7 +116,7 @@ const PromotionConfigSection = ({ mapping = {}, handleChange }) => {
                   />
                 </div>
               )}
-              {!showAdvanced && <div className="text-xs text-slate-400 italic">Haz clic para configurar mapeo de campos destino.</div>}
+              {!showAdvanced && <div className="text-xs text-slate-400 dark:text-slate-500 italic">Haz clic para configurar mapeo de campos destino.</div>}
             </div>
           </div>
 
@@ -131,7 +131,7 @@ const PromotionConfigSection = ({ mapping = {}, handleChange }) => {
             </div>
 
             {rules.length === 0 ? (
-              <div className="p-8 text-center bg-white/5 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-300/30 text-slate-500/50 text-sm">
+              <div className="p-8 text-center bg-white/5 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-300/30 dark:border-slate-600/30 text-slate-500/50 dark:text-slate-400/60 text-sm">
                 No hay reglas configuradas. Las promociones se procesarán según los campos de detección por defecto.
               </div>
             ) : (

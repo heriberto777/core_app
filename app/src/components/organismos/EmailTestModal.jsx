@@ -40,30 +40,30 @@ export function EmailTestModal({ isOpen, onClose, config, onSendTest }) {
         <Modal isOpen={isOpen} onClose={resetAndClose} maxWidth="max-w-lg">
             <div className="flex flex-col gap-8 p-8 animate-in fade-in zoom-in-95 duration-200">
                 <div className="flex items-center justify-between">
-                    <h2 className="m-0 text-xl font-extrabold text-slate-900 flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600">
+                    <h2 className="m-0 text-xl font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center text-blue-600 dark:text-blue-300">
                             <FaVial />
                         </div>
                         Probar Configuración
                     </h2>
-                    <button onClick={resetAndClose} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                    <button onClick={resetAndClose} className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
                         <FaTimes />
                     </button>
                 </div>
 
-                <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl text-xs text-slate-600 leading-relaxed">
-                    Estás probando la cuenta <strong className="text-blue-700">{config?.name}</strong>. Se enviará un correo técnico para validar que el host, puerto y credenciales funcionen correctamente en tiempo real.
+                <div className="p-4 bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30 rounded-2xl text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                    Estás probando la cuenta <strong className="text-blue-700 dark:text-blue-300">{config?.name}</strong>. Se enviará un correo técnico para validar que el host, puerto y credenciales funcionen correctamente en tiempo real.
                 </div>
 
                 <div className="flex flex-col gap-4">
                     <div className="flex flex-col gap-2">
-                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 px-1">Email de Destino</label>
+                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 px-1">Email de Destino</label>
                         <div className="relative flex items-center">
-                            <FaPaperPlane className="absolute left-4 text-slate-300 text-xs" />
+                            <FaPaperPlane className="absolute left-4 text-slate-300 dark:text-slate-600 text-xs" />
                             <input
                                 type="email"
                                 placeholder="correo@ejemplo.com"
-                                className="w-full pl-10 pr-4 py-3.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold transition-all placeholder:text-slate-300"
+                                className="w-full pl-10 pr-4 py-3.5 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 dark:bg-slate-900/40 text-slate-900 dark:text-slate-100 font-bold transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
                                 value={testEmail}
                                 onChange={(e) => setTestEmail(e.target.value)}
                                 disabled={loading}
@@ -74,7 +74,7 @@ export function EmailTestModal({ isOpen, onClose, config, onSendTest }) {
 
                 {result && (
                     <div className={`p-4 rounded-2xl flex items-start gap-4 text-xs font-bold animate-in slide-in-from-top-2 duration-200 ${
-                        result.success ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-red-50 text-red-700 border border-red-100"
+                        result.success ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800" : "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-800"
                     }`}>
                         <div className="mt-0.5">
                             {result.success ? <FaCheckCircle className="text-lg" /> : <FaExclamationTriangle className="text-lg" />}

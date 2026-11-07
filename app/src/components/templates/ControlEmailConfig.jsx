@@ -106,7 +106,7 @@ export function ControlEmailConfig() {
             <h2 className="m-0 text-[28px] font-extrabold text-slate-800 dark:text-white flex items-center gap-3">
               <FaEnvelope className="text-blue-500" /> Infraestructura de Email
             </h2>
-            <p className="m-0 text-sm font-semibold text-slate-500">Gestión de servidores SMTP y notificaciones automatizadas del sistema.</p>
+            <p className="m-0 text-sm font-semibold text-slate-500 dark:text-slate-400">Gestión de servidores SMTP y notificaciones automatizadas del sistema.</p>
           </div>
 
           <div className="flex gap-3">
@@ -120,7 +120,7 @@ export function ControlEmailConfig() {
         {loading && !refreshing ? (
           <div className="flex flex-col items-center justify-center p-20 gap-5 text-center">
             <LoadingSpinner />
-            <p className="font-bold text-slate-500">Sincronizando configuraciones SMTP...</p>
+            <p className="font-bold text-slate-500 dark:text-slate-400">Sincronizando configuraciones SMTP...</p>
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center p-20 gap-5 text-center">

@@ -55,35 +55,35 @@ export function ConsecutiveAssignModal({ isOpen, onClose, onAssign, consecutive,
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[2000] p-4 animate-in fade-in duration-300" onClick={onClose}>
-            <div className="bg-white w-full max-w-[550px] rounded-xl border border-slate-200 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
+            <div className="bg-white dark:bg-slate-800 w-full max-w-[550px] rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
                 {/* Header */}
-                <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/40">
                     <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600">
+                        <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center text-blue-600 dark:text-blue-300">
                             <FaLink />
                         </div>
-                        <h3 className="text-xl font-extrabold text-slate-900">Vincular Folio</h3>
+                        <h3 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">Vincular Folio</h3>
                     </div>
                     <Button variant="ghost" onClick={onClose} className="rounded-full !w-10 !h-10 !p-0 flex items-center justify-center">
-                        <FaTimes className="text-slate-400" />
+                        <FaTimes className="text-slate-400 dark:text-slate-500" />
                     </Button>
                 </div>
 
                 {/* Body */}
                 <div className="p-8 flex flex-col gap-8">
-                    <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center gap-3">
-                        <div className="p-2 bg-blue-100 rounded-lg text-blue-600 text-xs">
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30 rounded-2xl flex items-center gap-3">
+                        <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg text-blue-600 dark:text-blue-300 text-xs">
                             <FaLayerGroup />
                         </div>
-                        <div className="text-sm text-blue-800 font-medium">
+                        <div className="text-sm text-blue-800 dark:text-blue-300 font-medium">
                             Asignando: <strong className="font-black">{consecutive.name}</strong>
                         </div>
                     </div>
 
                     <div className="flex flex-col gap-2">
-                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Tipo de Entidad</label>
+                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Tipo de Entidad</label>
                         <select
-                            className="w-full px-4 py-3.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold appearance-none transition-all"
+                            className="w-full px-4 py-3.5 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 dark:bg-slate-900/40 text-slate-900 dark:text-slate-100 font-bold appearance-none transition-all"
                             value={formData.entityType}
                             onChange={e => setFormData({ ...formData, entityType: e.target.value })}
                         >
@@ -95,10 +95,10 @@ export function ConsecutiveAssignModal({ isOpen, onClose, onAssign, consecutive,
 
                     {formData.entityType === 'mapping' ? (
                         <div className="flex flex-col gap-2 animate-in slide-in-from-top-2 duration-200">
-                            <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Mapeo de Transferencia</label>
+                            <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Mapeo de Transferencia</label>
                             <select
                                 disabled={loading}
-                                className="w-full px-4 py-3.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold appearance-none transition-all disabled:opacity-50"
+                                className="w-full px-4 py-3.5 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 dark:bg-slate-900/40 text-slate-900 dark:text-slate-100 font-bold appearance-none transition-all disabled:opacity-50"
                                 value={formData.entityId}
                                 onChange={e => setFormData({ ...formData, entityId: e.target.value })}
                             >
@@ -107,14 +107,14 @@ export function ConsecutiveAssignModal({ isOpen, onClose, onAssign, consecutive,
                                 ))}
                             </select>
                             {mappings.length === 0 && !loading && (
-                                <p className="text-xs text-red-500 font-bold mt-1 px-1">No se encontraron mapeos disponibles.</p>
+                                <p className="text-xs text-red-500 dark:text-red-400 font-bold mt-1 px-1">No se encontraron mapeos disponibles.</p>
                             )}
                         </div>
                     ) : (
                         <div className="flex flex-col gap-2 animate-in slide-in-from-top-2 duration-200">
-                            <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">ID de la Entidad</label>
+                            <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">ID de la Entidad</label>
                             <input
-                                className="w-full px-4 py-3.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold transition-all"
+                                className="w-full px-4 py-3.5 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 dark:bg-slate-900/40 text-slate-900 dark:text-slate-100 font-bold transition-all"
                                 placeholder="Ingrese el ID manual"
                                 value={formData.entityId}
                                 onChange={e => setFormData({ ...formData, entityId: e.target.value })}
@@ -123,10 +123,10 @@ export function ConsecutiveAssignModal({ isOpen, onClose, onAssign, consecutive,
                     )}
 
                     <div className="flex flex-col gap-4">
-                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 flex items-center gap-2">
                             <FaShieldAlt className="text-blue-500" /> Permisos de Operación
                         </label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-700">
                             {[
                                 { id: 'read', label: 'Lectura' },
                                 { id: 'increment', label: 'Incremento' },
@@ -138,7 +138,7 @@ export function ConsecutiveAssignModal({ isOpen, onClose, onAssign, consecutive,
                                     <label
                                         key={op.id}
                                         className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-black cursor-pointer transition-all border ${
-                                            checked ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/20" : "bg-white border-slate-200 text-slate-600 hover:border-blue-400"
+                                            checked ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/20" : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-blue-400"
                                         }`}
                                     >
                                         <input
@@ -147,7 +147,7 @@ export function ConsecutiveAssignModal({ isOpen, onClose, onAssign, consecutive,
                                             checked={checked}
                                             onChange={() => handleOpToggle(op.id)}
                                         />
-                                        {checked ? <FaCheckSquare /> : <FaSquare className="text-slate-300" />}
+                                        {checked ? <FaCheckSquare /> : <FaSquare className="text-slate-300 dark:text-slate-600" />}
                                         {op.label.toUpperCase()}
                                     </label>
                                 );
@@ -157,7 +157,7 @@ export function ConsecutiveAssignModal({ isOpen, onClose, onAssign, consecutive,
                 </div>
 
                 {/* Footer */}
-                <div className="px-8 py-6 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
+                <div className="px-8 py-6 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3 bg-slate-50/50 dark:bg-slate-900/40">
                     <Button variant="ghost" onClick={onClose}>Cancelar</Button>
                     <Button variant="primary" onClick={handleSubmit} disabled={loading} className="px-8 shadow-lg shadow-blue-500/20">
                         Confirmar Vínculo

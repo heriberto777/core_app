@@ -113,21 +113,21 @@ export function ConsecutiveFormModal({ isOpen, onClose, onSave, consecutive = nu
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[2000] p-4 animate-in fade-in duration-300">
-            <div className="w-full max-w-[800px] max-h-[95vh] bg-white rounded-xl border border-slate-100 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="w-full max-w-[800px] max-h-[95vh] bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
                 {/* Header */}
-                <div className="px-8 py-7 flex items-center justify-between border-b border-slate-50 bg-white/80 backdrop-blur-md">
+                <div className="px-8 py-7 flex items-center justify-between border-b border-slate-50 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-600/20">
                             <FaHashtag className="text-xl" />
                         </div>
                         <div className="flex flex-col">
-                            <h3 className="text-xl font-black text-slate-900 leading-tight">
+                            <h3 className="text-xl font-black text-slate-900 dark:text-slate-100 leading-tight">
                                 {consecutive ? "Editar Consecutivo" : "Nuevo Consecutivo"}
                             </h3>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Configuración de Numeración y Folios</span>
+                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Configuración de Numeración y Folios</span>
                         </div>
                     </div>
-                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 transition-colors">
                         <FaTimes />
                     </button>
                 </div>
@@ -201,13 +201,13 @@ export function ConsecutiveFormModal({ isOpen, onClose, onSave, consecutive = nu
                             />
                             <div className="flex flex-wrap gap-2 px-1">
                                 {["{PREFIX}", "{YEAR}", "{MONTH}", "{VALUE:length}"].map(tag => (
-                                    <span key={tag} className="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-1 rounded-md">{tag}</span>
+                                    <span key={tag} className="text-[9px] font-black bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-2 py-1 rounded-md">{tag}</span>
                                 ))}
                             </div>
                         </div>
 
-                        <label className="flex items-center gap-4 px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl cursor-pointer group hover:bg-slate-100/50 transition-all">
-                            <div className={`w-10 h-5 rounded-full p-1 transition-colors relative ${formData.active ? "bg-emerald-500" : "bg-slate-300"}`}>
+                        <label className="flex items-center gap-4 px-6 py-4 bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-700 rounded-2xl cursor-pointer group hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all">
+                            <div className={`w-10 h-5 rounded-full p-1 transition-colors relative ${formData.active ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`}>
                                 <div className={`w-3 h-3 bg-white rounded-full transition-transform transform ${formData.active ? "translate-x-5" : "translate-x-0"}`} />
                             </div>
                             <input
@@ -218,16 +218,16 @@ export function ConsecutiveFormModal({ isOpen, onClose, onSave, consecutive = nu
                                 className="sr-only"
                             />
                             <div className="flex flex-col">
-                                <span className={`text-xs font-black uppercase tracking-wider ${formData.active ? "text-emerald-700" : "text-slate-500"}`}>Estado del Consecutivo</span>
-                                <span className="text-[10px] font-bold text-slate-400">Determina si este folio puede ser utilizado en procesos operativos</span>
+                                <span className={`text-xs font-black uppercase tracking-wider ${formData.active ? "text-emerald-700 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400"}`}>Estado del Consecutivo</span>
+                                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">Determina si este folio puede ser utilizado en procesos operativos</span>
                             </div>
                         </label>
                     </div>
 
                     {/* Operational Segments */}
-                    <div className="p-8 bg-slate-50/50 border border-slate-100 rounded-xl space-y-6">
+                    <div className="p-8 bg-slate-50/50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-700 rounded-xl space-y-6">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3">
+                            <h3 className="text-[11px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-[0.2em] flex items-center gap-3">
                                 <FaLayerGroup className="text-emerald-500" /> Segmentación Operativa
                             </h3>
                             <label className="flex items-center gap-2 cursor-pointer">
@@ -236,9 +236,9 @@ export function ConsecutiveFormModal({ isOpen, onClose, onSave, consecutive = nu
                                     name="segments.enabled"
                                     checked={formData.segments.enabled}
                                     onChange={handleChange}
-                                    className="w-5 h-5 rounded-lg border-slate-200 text-emerald-600 focus:ring-emerald-500"
+                                    className="w-5 h-5 rounded-lg border-slate-200 dark:border-slate-600 text-emerald-600 focus:ring-emerald-500"
                                 />
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Habilitar</span>
+                                <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Habilitar</span>
                             </label>
                         </div>
 
@@ -272,9 +272,9 @@ export function ConsecutiveFormModal({ isOpen, onClose, onSave, consecutive = nu
                     </div>
 
                     {/* ERP Sync */}
-                    <div className="p-8 bg-blue-50/30 border border-blue-100 rounded-xl space-y-6">
+                    <div className="p-8 bg-blue-50/30 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30 rounded-xl space-y-6">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-[11px] font-black text-blue-900 uppercase tracking-[0.2em] flex items-center gap-3">
+                            <h3 className="text-[11px] font-black text-blue-900 dark:text-blue-300 uppercase tracking-[0.2em] flex items-center gap-3">
                                 <FaSync className="text-blue-500" /> Sincronización ERP (SQL Server)
                             </h3>
                             <label className="flex items-center gap-2 cursor-pointer">
@@ -283,9 +283,9 @@ export function ConsecutiveFormModal({ isOpen, onClose, onSave, consecutive = nu
                                     name="sqlSync.enabled"
                                     checked={formData.sqlSync.enabled}
                                     onChange={handleChange}
-                                    className="w-5 h-5 rounded-lg border-blue-200 text-blue-600 focus:ring-blue-500"
+                                    className="w-5 h-5 rounded-lg border-blue-200 dark:border-blue-700 text-blue-600 focus:ring-blue-500"
                                 />
-                                <span className="text-[10px] font-black text-blue-600/50 uppercase tracking-widest">Habilitar</span>
+                                <span className="text-[10px] font-black text-blue-600/50 dark:text-blue-400/60 uppercase tracking-widest">Habilitar</span>
                             </label>
                         </div>
 
@@ -341,7 +341,7 @@ export function ConsecutiveFormModal({ isOpen, onClose, onSave, consecutive = nu
                 </div>
 
                 {/* Footer */}
-                <div className="px-8 py-6 border-t border-slate-50 flex justify-end gap-3 bg-white/80 backdrop-blur-md">
+                <div className="px-8 py-6 border-t border-slate-50 dark:border-slate-700 flex justify-end gap-3 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md">
                     <Button variant="ghost" onClick={onClose} className="font-bold">Cancelar</Button>
                     <Button variant="primary" onClick={handleSubmit} className="px-8 shadow-lg shadow-emerald-600/20 font-black">
                         <FaSave className="mr-2" /> {consecutive ? "Guardar Cambios" : "Crear Consecutivo"}

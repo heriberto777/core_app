@@ -171,17 +171,17 @@ export function ConsecutiveManager() {
       {/* HEADER SECTION */}
       <header className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6">
         <div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Gestión de Consecutivos</h1>
-          <p className="text-slate-500 mt-2 font-medium">Control centralizado de folios, numeración y segmentación de documentos.</p>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">Gestión de Consecutivos</h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Control centralizado de folios, numeración y segmentación de documentos.</p>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
           <div className="relative flex-1 xl:w-80">
-            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
             <input
               placeholder="Buscar por nombre o descripción..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full py-3 pl-11 pr-4 rounded-xl border border-slate-200 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all text-sm font-medium"
+              className="w-full py-3 pl-11 pr-4 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all text-sm font-medium"
             />
           </div>
           <div className="flex items-center gap-3 flex-wrap">
@@ -195,7 +195,7 @@ export function ConsecutiveManager() {
             )}
             <button
               onClick={loadConsecutives}
-              className={`w-12 h-12 shrink-0 rounded-xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-slate-50 hover:text-primary-500 transition-all ${loading ? 'animate-spin' : ''}`}
+              className={`w-12 h-12 shrink-0 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-primary-500 transition-all ${loading ? 'animate-spin' : ''}`}
             >
               <FaSync />
             </button>
@@ -208,11 +208,11 @@ export function ConsecutiveManager() {
         {showDashboard ? (
           <ConsecutiveDashboardPanel data={dashboardData} onClose={() => setShowDashboard(false)} />
         ) : (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-soft overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-soft overflow-hidden">
             {loading ? (
               <LoadingUI message="Sincronizando consecutivos con el servidor de folios..." />
             ) : filteredConsecutives.length === 0 ? (
-              <div className="p-32 flex flex-col items-center justify-center text-center gap-4 text-slate-400">
+              <div className="p-32 flex flex-col items-center justify-center text-center gap-4 text-slate-400 dark:text-slate-500">
                 <FaHistory size={48} className="opacity-20" />
                 <p className="font-bold">No se encontraron consecutivos configurados.</p>
               </div>
@@ -220,27 +220,27 @@ export function ConsecutiveManager() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50/50 border-b border-slate-100">
-                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Consecutivo</th>
-                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Valor Actual</th>
-                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Máscara / Formato</th>
-                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Segmentación</th>
-                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Estado</th>
-                      <th className="px-6 py-5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-widest">Acciones</th>
+                    <tr className="bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-700">
+                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Consecutivo</th>
+                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Valor Actual</th>
+                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Máscara / Formato</th>
+                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Segmentación</th>
+                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Estado</th>
+                      <th className="px-6 py-5 text-right text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Acciones</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
+                  <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
                     {filteredConsecutives.map(c => (
-                      <tr key={c._id} className="hover:bg-slate-50/30 transition-colors group">
+                      <tr key={c._id} className="hover:bg-slate-50/30 dark:hover:bg-slate-700/30 transition-colors group">
                         <td className="px-6 py-5">
-                          <div className="font-extrabold text-slate-700 tracking-tight">{c.name}</div>
-                          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-tighter mt-1">{c.description || 'Sin descripción'}</div>
+                          <div className="font-extrabold text-slate-700 dark:text-slate-200 tracking-tight">{c.name}</div>
+                          <div className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter mt-1">{c.description || 'Sin descripción'}</div>
                         </td>
                         <td className="px-6 py-5">
-                          <span className="text-2xl font-black text-primary-600 font-mono tracking-tighter">{c.currentValue}</span>
+                          <span className="text-2xl font-black text-primary-600 dark:text-primary-400 font-mono tracking-tighter">{c.currentValue}</span>
                         </td>
                         <td className="px-6 py-5">
-                          <code className="px-3 py-1 bg-slate-100 rounded-lg text-slate-600 text-xs font-bold border border-slate-200">
+                          <code className="px-3 py-1 bg-slate-100 dark:bg-slate-900/40 rounded-lg text-slate-600 dark:text-slate-300 text-xs font-bold border border-slate-200 dark:border-slate-700">
                             {c.pattern || `${c.prefix || ''}[${c.padChar.repeat(c.padLength)}]`}
                           </code>
                         </td>
@@ -258,19 +258,19 @@ export function ConsecutiveManager() {
                         </td>
                         <td className="px-6 py-5">
                           <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => onGetNextValue(c)} className="p-2 text-slate-400 hover:text-primary-500 hover:bg-primary-50 rounded-lg transition-all" title="Generar Siguiente"><FaPlay size={14}/></button>
-                            <button onClick={() => onViewDetails(c)} className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all" title="Métricas"><FaInfoCircle size={14}/></button>
+                            <button onClick={() => onGetNextValue(c)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-lg transition-all" title="Generar Siguiente"><FaPlay size={14}/></button>
+                            <button onClick={() => onViewDetails(c)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all" title="Métricas"><FaInfoCircle size={14}/></button>
                             {canUpdate && (
-                              <button onClick={() => onAssignClick(c)} className="p-2 text-slate-400 hover:text-violet-500 hover:bg-violet-50 rounded-lg transition-all" title="Vincular"><FaLink size={14}/></button>
+                              <button onClick={() => onAssignClick(c)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-violet-500 hover:bg-violet-50 dark:hover:bg-violet-900/30 rounded-lg transition-all" title="Vincular"><FaLink size={14}/></button>
                             )}
                             {canUpdate && (
-                              <button onClick={() => onResetClick(c)} className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all" title="Reiniciar"><FaSync size={14}/></button>
+                              <button onClick={() => onResetClick(c)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-all" title="Reiniciar"><FaSync size={14}/></button>
                             )}
                             {canUpdate && (
-                              <button onClick={() => openEdit(c)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all" title="Editar"><FaEdit size={14}/></button>
+                              <button onClick={() => openEdit(c)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all" title="Editar"><FaEdit size={14}/></button>
                             )}
                             {canDelete && (
-                              <button onClick={() => onDeleteClick(c)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Eliminar"><FaTrash size={14}/></button>
+                              <button onClick={() => onDeleteClick(c)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all" title="Eliminar"><FaTrash size={14}/></button>
                             )}
                           </div>
                         </td>

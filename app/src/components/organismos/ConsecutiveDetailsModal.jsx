@@ -10,17 +10,17 @@ export function ConsecutiveDetailsModal({ isOpen, onClose, metrics }) {
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[2000] p-4 animate-in fade-in duration-300" onClick={onClose}>
-            <div className="bg-white w-full max-w-3xl max-h-[85vh] rounded-xl border border-slate-200 shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 duration-300" onClick={e => e.stopPropagation()}>
+            <div className="bg-white dark:bg-slate-800 w-full max-w-3xl max-h-[85vh] rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 duration-300" onClick={e => e.stopPropagation()}>
                 {/* Header */}
-                <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/40">
                     <div className="flex flex-col">
-                        <h3 className="text-xl font-extrabold text-slate-900 leading-tight">Análisis de Folio</h3>
-                        <span className="text-sm font-medium text-slate-500 mt-1">
-                            Consecutivo: <strong className="text-blue-600 font-bold">{consecutiveName}</strong>
+                        <h3 className="text-xl font-extrabold text-slate-900 dark:text-slate-100 leading-tight">Análisis de Folio</h3>
+                        <span className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
+                            Consecutivo: <strong className="text-blue-600 dark:text-blue-400 font-bold">{consecutiveName}</strong>
                         </span>
                     </div>
                     <Button variant="ghost" onClick={onClose} className="rounded-full w-10 h-10 flex items-center justify-center p-0">
-                        <FaTimes className="text-slate-400" />
+                        <FaTimes className="text-slate-400 dark:text-slate-500" />
                     </Button>
                 </div>
 
@@ -28,25 +28,25 @@ export function ConsecutiveDetailsModal({ isOpen, onClose, metrics }) {
                 <div className="p-8 overflow-y-auto flex-1 flex flex-col gap-10">
                     {/* Metrics Section */}
                     <div className="flex flex-col gap-5">
-                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-blue-600 flex items-center gap-3">
+                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400 flex items-center gap-3">
                             <FaChartBar className="text-blue-500" /> Rendimiento (Últimas 24h)
                         </h4>
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col gap-1 hover:border-blue-200 transition-colors">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor Actual</span>
-                                <span className="text-3xl font-black text-slate-900">{currentValue}</span>
+                            <div className="p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-1 hover:border-blue-200 dark:hover:border-blue-800 transition-colors">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Valor Actual</span>
+                                <span className="text-3xl font-black text-slate-900 dark:text-slate-100">{currentValue}</span>
                             </div>
-                            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col gap-1 hover:border-emerald-200 transition-colors">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Incrementos</span>
+                            <div className="p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-1 hover:border-emerald-200 dark:hover:border-emerald-800 transition-colors">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Incrementos</span>
                                 <span className="text-3xl font-black text-emerald-500">+{stats.totalIncrements}</span>
                             </div>
-                            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col gap-1 hover:border-sky-200 transition-colors">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Reservas Activas</span>
+                            <div className="p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-1 hover:border-sky-200 dark:hover:border-sky-800 transition-colors">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Reservas Activas</span>
                                 <span className="text-3xl font-black text-sky-500">{stats.activeReservations}</span>
                             </div>
-                            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col gap-1 hover:border-slate-300 transition-colors">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Rango Operativo</span>
-                                <div className="text-sm font-black text-slate-700 mt-2">
+                            <div className="p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-1 hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Rango Operativo</span>
+                                <div className="text-sm font-black text-slate-700 dark:text-slate-200 mt-2">
                                     {stats.valueRange.min} — {stats.valueRange.max}
                                 </div>
                             </div>
@@ -56,24 +56,24 @@ export function ConsecutiveDetailsModal({ isOpen, onClose, metrics }) {
                     {/* Segments Section */}
                     {segments.length > 0 && (
                         <div className="flex flex-col gap-5">
-                            <h4 className="text-xs font-black uppercase tracking-[0.2em] text-blue-600 flex items-center gap-3">
+                            <h4 className="text-xs font-black uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400 flex items-center gap-3">
                                 <FaLayerGroup className="text-blue-500" /> Desglose por Segmentos
                             </h4>
-                            <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
                                 <table className="w-full text-left text-sm border-collapse">
-                                    <thead className="bg-slate-50">
+                                    <thead className="bg-slate-50 dark:bg-slate-900/40">
                                         <tr>
-                                            <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider text-[11px]">Identificador</th>
-                                            <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider text-[11px]">Valor Actual</th>
-                                            <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider text-[11px]">Incrementos (24h)</th>
-                                            <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-wider text-[11px]">Estado</th>
+                                            <th className="px-6 py-4 font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider text-[11px]">Identificador</th>
+                                            <th className="px-6 py-4 font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider text-[11px]">Valor Actual</th>
+                                            <th className="px-6 py-4 font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider text-[11px]">Incrementos (24h)</th>
+                                            <th className="px-6 py-4 font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider text-[11px]">Estado</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100">
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                                         {segments.map(([name, data]) => (
-                                            <tr key={name} className="hover:bg-slate-50/50 transition-colors group">
-                                                <td className="px-6 py-4 font-bold text-slate-700 group-hover:text-blue-600">{name}</td>
-                                                <td className="px-6 py-4 font-black text-slate-900">{data.currentValue}</td>
+                                            <tr key={name} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors group">
+                                                <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400">{name}</td>
+                                                <td className="px-6 py-4 font-black text-slate-900 dark:text-slate-100">{data.currentValue}</td>
                                                 <td className="px-6 py-4 font-black text-emerald-500">+{data.incrementCount}</td>
                                                 <td className="px-6 py-4">
                                                     <StatusBadge status="ACTIVE" className="scale-90 origin-left" />
@@ -88,19 +88,19 @@ export function ConsecutiveDetailsModal({ isOpen, onClose, metrics }) {
 
                     {/* No Segments Fallback */}
                     {!segments.length && (
-                        <div className="bg-slate-50 border border-slate-200 rounded-3xl p-10 flex flex-col items-center text-center">
-                            <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4">
-                                <FaInfoCircle className="text-slate-300 text-2xl" />
+                        <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-3xl p-10 flex flex-col items-center text-center">
+                            <div className="w-16 h-16 bg-white dark:bg-slate-800 rounded-full shadow-sm flex items-center justify-center mb-4">
+                                <FaInfoCircle className="text-slate-300 dark:text-slate-600 text-2xl" />
                             </div>
-                            <p className="text-slate-500 text-sm max-w-[400px] leading-relaxed">
-                                Este consecutivo no utiliza segmentación. Los valores son <strong className="text-slate-700">globales</strong> para todo el sistema de manera unificada.
+                            <p className="text-slate-500 dark:text-slate-400 text-sm max-w-[400px] leading-relaxed">
+                                Este consecutivo no utiliza segmentación. Los valores son <strong className="text-slate-700 dark:text-slate-200">globales</strong> para todo el sistema de manera unificada.
                             </p>
                         </div>
                     )}
                 </div>
 
                 {/* Footer */}
-                <div className="px-8 py-6 border-t border-slate-100 flex justify-end bg-slate-50/30">
+                <div className="px-8 py-6 border-t border-slate-100 dark:border-slate-700 flex justify-end bg-slate-50/30 dark:bg-slate-900/30">
                     <Button variant="primary" onClick={onClose} className="px-10 shadow-lg shadow-blue-500/20">
                         Cerrar Análisis
                     </Button>

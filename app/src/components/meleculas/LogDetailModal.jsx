@@ -13,14 +13,14 @@ const Overlay = (props) => (
 const Content = (props) => (
   <div
     {...props}
-    className="w-[90vw] max-w-4xl max-h-[90vh] rounded-lg shadow-xl flex flex-col overflow-hidden border border-slate-700 bg-white dark:bg-slate-800"
+    className="w-[90vw] max-w-4xl max-h-[90vh] rounded-lg shadow-xl flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
   />
 );
 
 const Header = (props) => (
   <div
     {...props}
-    className="px-4 py-3 border-b border-slate-700 flex justify-between items-center bg-slate-100 dark:bg-slate-900"
+    className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-100 dark:bg-slate-900"
   />
 );
 
@@ -69,14 +69,14 @@ const Value = (props) => (
 const CodeBlock = (props) => (
   <pre
     {...props}
-    className="bg-slate-100 dark:bg-slate-900 p-3 rounded-lg font-mono text-xs overflow-x-auto border border-slate-700 text-slate-900 dark:text-slate-100"
+    className="bg-slate-100 dark:bg-slate-900 p-3 rounded-lg font-mono text-xs overflow-x-auto border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
   />
 );
 
 const CollapsibleSectionWrapper = (props) => (
   <div
     {...props}
-    className="border border-slate-700 rounded-lg overflow-hidden"
+    className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden"
   />
 );
 
@@ -97,7 +97,7 @@ const CollapsibleTitle = (props) => (
 const CollapsibleContent = (props) => (
   <div
     {...props}
-    className="p-3 border-t border-slate-700"
+    className="p-3 border-t border-slate-200 dark:border-slate-700"
   />
 );
 
