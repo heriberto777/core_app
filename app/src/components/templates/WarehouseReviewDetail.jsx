@@ -99,23 +99,23 @@ function ProductoRow({ producto, onSaveLine, isSaving }) {
 
   return (
     <div className="border border-slate-100 rounded-xl overflow-hidden">
-      <div className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-4 px-5 py-4 bg-white">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 bg-white">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200"
+          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200"
         >
           {expanded ? <FaChevronUp /> : <FaChevronDown />}
         </button>
 
-        <div>
+        <div className="flex-1 min-w-[160px]">
           <div className="font-bold text-slate-900">{producto.codigo} — {producto.descripcion}</div>
           <div className="text-xs text-slate-500 mt-0.5">
             Empaque: {producto.empaque} u/caja · Acumulado preventa: {producto.totalActual} u
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <label className="text-xs font-semibold text-slate-500">Cajas</label>
           <input
             type="number"
@@ -134,7 +134,7 @@ function ProductoRow({ producto, onSaveLine, isSaving }) {
           />
         </div>
 
-        <div>
+        <div className="shrink-0">
           {tieneFaltante ? (
             <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1.5 rounded-full">
               <FaExclamationTriangle /> Falta {falta} u
@@ -148,7 +148,7 @@ function ProductoRow({ producto, onSaveLine, isSaving }) {
       </div>
 
       {expanded && (
-        <div className="border-t border-slate-100 bg-slate-50/60">
+        <div className="border-t border-slate-100 bg-slate-50/60 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
